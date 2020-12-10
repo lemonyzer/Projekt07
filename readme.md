@@ -7,7 +7,7 @@
 
 ### PlayStation 2 Controller
 <p>
-    <img src="/assets/pinout ps2 controller.jpg"><br><br>
+    <img src="/assets/pinout ps2 controller.jpg" width="400" height="328"><br><br>
     <ol>
         <li><p style="margin-bottom: 0cm; text-decoration: none;"><b><font color="#ff0000">(Ausgang)</font>	<font color="#00ff00">DATA</font></b>, 8-bit, serieller Transfer</p>
             <p style="margin-bottom: 0cm; text-decoration: none;">-bei negativer	Flanke von CLOCK</p></li>
