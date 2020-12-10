@@ -1,0 +1,1319 @@
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ; ***********************************************************
+                      00002 ; * Projekt07_4_1.asm - Playstation Controller an PIC16F84A *
+                      00003 ; ***********************************************************
+                      00004 ;
+                      00005 ;       Aryan Layes     HBFI05a         04/2007
+                      00006 ;
+                      00007 ;       Der PIC soll mit einem PS-Controller kommunizieren
+                      00008 ;       und erkennen welche Tasten auf dem Controller gedrückt wurden.
+                      00009 ;
+                      00010 ;       Wenn er weiß was gedrückt wurde, schaltet er die zu den
+                      00011 ;       entsprechenden Tasten gehörenden LED's ein bzw. aus.
+                      00012 ;       
+                      00013 ;       Anzeige -> MAX7219 LED Display Treiber aus dem Hause MAXIM
+                      00014 ;
+                      00015 ; #############################################################################
+                      00016 ;
+                      00017 ;       D: Digitaler Controller (keine Joysticks)
+                      00018 ;       A: Analoger Controller (2 Joysticks)
+                      00019 ;
+                      00020 ;RxByte Type    Taste   Hex     Binär
+                      00021 ;-------------------------------------------    
+                      00022 ;1      D/A     Left    0xFE    11111110
+                      00023 ;1      D/A     Down    0xFD    11111101
+                      00024 ;1      D/A     Right   0xFB    11111011
+                      00025 ;1      D/A     Up      0xF7    11110111
+                      00026 ;1      D/A     Start   0xEF    11101111
+                      00027 ;1      A       Joy-R   0xDF    11011111        ---- Nur Analoger Controller
+                      00028 ;1      A       Joy-L   0xBF    10111111        ---- Nur Analoger Controller
+                      00029 ;1      D/A     Select  0x7F    01111111
+                      00030 ;-------------------------------------------
+                      00031 ;2      D/A     []      0xFE    11111110
+                      00032 ;2      D/A     X       0xFD    11111101
+                      00033 ;2      D/A     O       0xFB    11111011
+                      00034 ;2      D/A     /_\     0xF7    11110111
+                      00035 ;2      D/A     R1      0xEF    11101111        
+                      00036 ;2      D/A     L1      0xDF    11011111
+                      00037 ;2      D/A     R2      0xBF    10111111
+                      00038 ;2      D/A     L2      0x7F    01111111
+                      00039 ;-------------------------------------------
+                      00040 ;  Mehrere Buttons werden UND Verknüpft...
+                      00041 ;-------------------------------------------
+                      00042 ;       A       Joy-R-X 
+                      00043 ;       A       Joy-R-X 
+                      00044 ;       A       Joy-R-X 
+                      00045 ;       A       Joy-R-X 
+                      00046 ;       A       Joy-R-X 
+                      00047 ;       A       Joy-R-X 
+                      00048 ;       A       Joy-R-X 
+                      00049 ;       A       Joy-R-X 
+                      00050 ;       -----------------------------------
+                      00051 ;       A       Joy-R-Y 
+                      00052 ;       A       Joy-R-Y 
+                      00053 ;       A       Joy-R-Y
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00054 ;       A       Joy-R-Y 
+                      00055 ;       A       Joy-R-Y 
+                      00056 ;       A       Joy-R-Y 
+                      00057 ;       A       Joy-R-Y 
+                      00058 ;       A       Joy-R-Y 
+                      00059 ;       -----------------------------------
+                      00060 ;       A       Joy-L-X 
+                      00061 ;       A       Joy-L-X 
+                      00062 ;       A       Joy-L-X 
+                      00063 ;       A       Joy-L-X 
+                      00064 ;       A       Joy-L-X 
+                      00065 ;       A       Joy-L-X 
+                      00066 ;       A       Joy-L-X 
+                      00067 ;       A       Joy-L-X 
+                      00068 ;       -----------------------------------
+                      00069 ;       A       Joy-L-Y 
+                      00070 ;       A       Joy-L-Y 
+                      00071 ;       A       Joy-L-Y 
+                      00072 ;       A       Joy-L-Y 
+                      00073 ;       A       Joy-L-Y 
+                      00074 ;       A       Joy-L-Y 
+                      00075 ;       A       Joy-L-Y 
+                      00076 ;       A       Joy-L-Y 
+                      00077 ;       -----------------------------------
+                      00078 ;
+                      00079 ; **************************************************************
+                      00080 ; *                     Changelog beta_4_1              *
+                      00081 ; **************************************************************
+                      00082 ;       Überprüfung ob Controller bereit
+                      00083 ;               wenn nicht bereit-> MAX Digits löschen
+                      00084 ;               und dann warten bis Controller wieder bereit            
+                      00085 ; **************************************************************
+                      00086 ; *                     Changelog beta_4_0              *
+                      00087 ; **************************************************************
+                      00088 ;       Register Invertierung 
+                      00089 ;               gLEFT und gRIGHT, sodass nur noch die 
+                      00090 ;               LED's der Taste an sind, die auch
+                      00091 ;               gedrückt sind.
+                      00092 ;
+                      00093 ;
+                      00094 ;***************************************************************************
+                      00095 ;* Bestimmung des Prozessortyps für den Assembler und das Programmiergerät *
+                      00096 ;***************************************************************************
+                      00097 
+                      00098                 LIST p=16F84A
+                      00099 
+                      00100 
+                      00101 ;*******************************************************************
+                      00102 ;* Includedatei für den 16F84A einbinden (vordef. Reg. und Konst.) *
+                      00103 ;*******************************************************************
+                      00104 
+                      00105                 #include <p16f84A.INC>
+                      00001         LIST
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00002 ; P16F84A.INC  Standard Header File, Version 2.00    Microchip Technology, Inc.
+                      00134         LIST
+                      00106 
+                      00107 ; Diese Datei enthält Vordefinitionen für wichtige Register und Konstanten.
+                      00108 ; (Z.B. gibt es die Konstante PORTB mit der sich ohne Angabe der
+                      00109 ; absoluten Adresse H'0006' der Port B des Prozessors ansprechen lässt)
+                      00110 
+                      00111 
+                      00112 ;*********************************************************
+                      00113 ;* Konfigurationseinstellungen für IC-Prog vordefinieren *
+                      00114 ;*********************************************************
+                      00115 
+2007   3FF2           00116                 __CONFIG _PWRTE_ON & _CP_OFF & _HS_OSC & _WDT_OFF
+                      00117 
+                      00118 ; Hier werden verschiedene Prozessoreigenschaften festgelegt:
+                      00119 ; _PWRTE_ON schaltet den Power Up Timer ein, d.h. der Prozessor wartet nach
+                      00120 ;           dem Einschalten ca. 70ms mit dem Programmstart, um sicher zu sein,
+                      00121 ;           dass alle angeschlossene Peripherie bereit ist.
+                      00122 ; _CP_OFF schaltet die Code-Protection des Prozesors aus. Damit ist das im Prozessor
+                      00123 ;        befindliche Programm jederzeit auslesbar und überschreibbar.
+                      00124 ; _HS_OSC spezifiziert einen Quarzoszillator (Highspeed) als Zeitbasis für den Prozessor.
+                      00125 ; _WDT_OFF schaltet den Watchdog-Timer des Prozesors aus.
+                      00126 
+                      00127 
+                      00128 ;***********************************
+                      00129 ;* Register / Variablen  festlegen *
+                      00130 ;***********************************
+                      00131 ; hier werden Adressen von Registern / Variablen festgelegt. Diese werden beginnend
+                      00132 ; mit der Adresse H'20' aufsteigend vergeben.
+                      00133 
+                      00134 
+                      00135         CBLOCK  H'20'
+                      00136         
+                      00137 ;Register des PS2 Controller
+                      00138                 
+  00000020            00139                 sPSC            ;Übertragungsregiser (dynamische Tabelle)
+  00000021            00140                 sIDLE           ;IDLE-Register (= 0)
+                      00141 
+  00000022            00142                 sSTART          ;START-Befehl     (00000001)
+  00000023            00143                 gSTART          ;um später die PS2 Kommunikation per
+                      00144                                 ;dynamische Tabelle ab zu arbeiten
+                      00145 
+  00000024            00146                 sTYPE           ;GET TYPE-Befehl  (01000010)
+  00000025            00147                 gTYPE           ;Empfangene Daten nach dem GET TYPE Befehl
+                      00148 
+  00000026            00149                 gSTATUS         ;Status des Controllers (0x5A wenn bereit)
+  00000027            00150                 rSTATUS         ;Register um gSTATUS mit 0x5A zu vergleichen
+                      00151 
+  00000028            00152                 gLEFT           ;Status der Buttons: 
+                      00153                                 ;<- | \/ | -> | /\ | Start | JL | JR | Select
+                      00154                 
+  00000029            00155                 gRIGHT          ;Status der Buttons:
+                      00156                                 ;[] | X | O | /_\ | R1 | L1 | R2 | L2
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00157                                 
+  0000002A            00158                 gRJoyX          ;X Position des rechten Joysticks
+  0000002B            00159                 gRJoyY          ;Y Position des rechten Joysticks
+                      00160                 
+  0000002C            00161                 gLJoyX          ;X Position des linken Joysticks
+  0000002D            00162                 gLJoyY          ;X Position des linken Joysticks
+                      00163 ;14 Register
+                      00164         
+                      00165         ;Warteschlangen
+                      00166         
+                      00167                 ;wait_20us      ;Wartezeit nach dem a_ATT auf 0 geht
+  0000002E            00168                 wait_50us       ;Wartezeit nach dem a_ATT auf 0 geht            ;NEW
+                      00169                 
+                      00170                 ;wait_5us       ;Wartezeit zwischen CLOCK LOW und HIGH
+  0000002F            00171                 wait_25us       ;Wartezeit zwischen CLOCK LOW und HIGH          ;NEW
+                      00172 ;2 Register
+                      00173 
+                      00174 
+                      00175 ;Register des MAX-7219
+                      00176 
+  00000030            00177                 zaehler_bit     ;Zaehler der einzelnen Übertragenene Bits
+  00000031            00178                 zaehler_tab     ;Zaehler um in der MAX-Tabelle zu springen
+                      00179 
+  00000032            00180                 sMAX            ;Register das zur Kommunikation zwischen PIC
+                      00181                                 ;und MAX-7219 dient
+                      00182 ;3 Register
+                      00183                         
+                      00184         ;zur Initialisierung:
+                      00185                 
+                      00186                 ;MAX Digit Kodierungs
+                      00187                 ;kMODUS_adr     ;Modusbefehlsadresse
+                      00188                 ;m_MODUS                ;MAX Digit Kodierungsmodus
+                      00189                 
+  00000033            00190                 m_D_MODUS_adr   ; 0x09 Digit Kodierungsmodus Adresse
+  00000034            00191                 m_D_MODUS       ; 0x00 MAX Digit Kodierungsmodus                ->keine Kodierung<-
+                      00192                 
+                      00193                 ;MAX Digit Helligkeit
+  00000035            00194                 m_HELLIGKEIT_adr        ; 0x0A MAX Helligkeitssteuerung Adresse
+  00000036            00195                 m_HELLIGKEIT    ; 0x15 MAX Helligkeitssteuerung         ->Digit 31 / 32 (max ON)<-
+                      00196                 
+                      00197                 ;MAX Digit Anzahl
+  00000037            00198                 m_DIGITS_adr    ; 0x0B Digitsanzahl Adresse
+  00000038            00199                 m_DIGITS                ; 0x01 Anzahl der aktivierten Digits    ->Digit 0 und 1<-
+                      00200                 
+                      00201                 ;MAX Shutdown
+                      00202                 ;kSTART_adr     ; 0x0C Startbefehlsadresse
+                      00203                 ;m_START                ; 0x01 MAX Shutdownbefehl                       ->Normal Operati
+                            on<-
+                      00204                 
+  00000039            00205                 m_SHUTDOWN_adr  ; 0x0C SHUTDOWN Adresse
+  0000003A            00206                 m_SHUTDOWN      ; 0x01 MAX Shutdownbefehl                       ->Normal Operation<-
+                      00207                 
+                      00208                 ;MAX Test
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+  0000003B            00209                 m_TEST_adr      ; 0x0F Testbefehlsadresse
+  0000003C            00210                 m_TEST          ; 0x00 MAX Testmodus                    ->KEIN TESTMODUS<-
+                      00211 ;10 Register
+                      00212         
+                      00213         ;zur Digitauswahl
+                      00214                 
+  0000003D            00215                 m_TYPE_adr      ; Type - Digit-Adresse
+  0000003E            00216                 m_STATUS_adr    ; Status - Digit-Adresse
+                      00217                 
+  0000003F            00218                 m_LEFT_adr      ; LINKS - Digit-Adresse
+  00000040            00219                 m_RIGHT_adr     ; RECHTS - Digit-Adresse
+                      00220                 
+  00000041            00221                 m_RJoyX_adr     ; Joystick rechts x-Achse - Digit-Adresse
+  00000042            00222                 m_RJoyY_adr     ; Joystick rechts y-Achse - Digit-Adresse
+                      00223                 
+  00000043            00224                 m_LJoyX_adr     ; Joystick links x-Achse - Digit-Adresse
+  00000044            00225                 m_LJoyY_adr     ; Joystick links y-Achse - Digit-Adresse
+                      00226                 
+  00000045            00227                 m_display_r
+  00000046            00228                 m_display_c
+  00000047            00229                 m_display_l 
+                      00230 ;8 Register
+                      00231    
+                      00232 ;Register um zu Überprüfen ob Controller bereit
+  00000048            00233                 zaehler
+                      00234                 
+                      00235 ;Register für die debugging Funktionen.....
+                      00236                 
+  00000049            00237                 wait_05s
+  0000004A            00238                 wait_05s_1
+  0000004B            00239                 wait_05s_2
+                      00240 
+                      00241 ;3 Register             
+                      00242 
+                      00243 
+                      00244 ;40 Register insgesammt -> Bank 0 reicht dafuer aus     
+                      00245         ENDC
+                      00246 
+                      00247 
+                      00248 ;***************************************************************
+                      00249 ;               * Konstanten festlegen * 
+                      00250 ;***************************************************************
+                      00251 
+                      00252 ;*****************************************
+                      00253 ;       * Konstanten des MAX-7219 * 
+                      00254 ;*****************************************
+                      00255 
+                      00256 ; ***********************************************************************
+                      00257 ; * Definition von einzelnen Bits in einem Register / in einer Variable *
+                      00258 ; ***********************************************************************
+                      00259 
+                      00260 ;#####################     Ports zum Controller    ################### 
+                      00261 ;##################### ___________________________ ###################
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00262 #DEFINE e_DATA          PORTA, 0                ; Data          Eingang
+                      00263 #DEFINE a_COMMAND       PORTA, 1                ; Command       Ausgang
+                      00264 #DEFINE a_CLOCK         PORTA, 2                ; Takt          Ausgang
+                      00265 #DEFINE a_ATT           PORTA, 3                ; ATT           Ausgang
+                      00266 ;#DEFINE        a_ACK           PORTA, 4                ; ACK   Eingang NICHT BENUTZT
+                      00267 
+                      00268 ;######################    Ports zur Anzeige     ##################### 
+                      00269 ;###################### ________________________ #####################
+                      00270 ;#DEFINE        a1              PORTB, 0                ; DEBBUGING     Ausgang
+                      00271 ;#DEFINE        b1              PORTB, 1                ;               Ausgang
+                      00272 ;#DEFINE        c1              PORTB, 2                ;               Ausgang
+                      00273 ;#DEFINE        d1              PORTB, 3                ;               Ausgang
+                      00274 ;###############################
+                      00275 ;#DEFINE        a2              PORTB, 4                ;               Ausgang
+                      00276 ;#DEFINE        b2              PORTB, 5                ;               Ausgang
+                      00277 ;#DEFINE        c2              PORTB, 6                ;               Ausgang
+                      00278 ;#DEFINE        d2              PORTB, 7                ;               Ausgang
+                      00279 ;###############################
+                      00280 #DEFINE a_MAX_DATA      PORTB, 0                ; MAX-7219-DATA Ausgang
+                      00281 #DEFINE a_MAX_LOAD      PORTB, 1                ; MAX-7219-LOAD Ausgang
+                      00282 #DEFINE a_MAX_CLOCK     PORTB, 2                ; MAX-7219-CLOCK        Ausgang
+                      00283 ;#####################################################################
+                      00284 #DEFINE bank1           STATUS, RP0
+                      00285 ;#####################################################################
+                      00286 
+                      00287 ;*****************
+                      00288 ;* Programmstart *
+                      00289 ;*****************
+                      00290 
+0000                  00291         ORG     H'00'   ; Das Programm wird ab Speicherstelle 0 in den
+                      00292                         ; Speicher geschrieben
+0000   2801           00293         GOTO    init    ; Springe zur Grundinitialisierung der Ports A und B
+                      00294 
+                      00295 
+                      00296 ;*******************
+                      00297 ;* Initialisierung *
+                      00298 ;*******************
+                      00299 
+0001   1683           00300 init    BSF     bank1   ; wechsle zu Registerbank 1 (spezielle Register)
+                      00301 
+0002   3001           00302         MOVLW   B'00000001'
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0003   0085           00303         MOVWF   TRISA   ; RA0 Eingang (RA1 bis RA7 sind Ausgänge)
+0004   3000           00304         MOVLW   B'00000000'
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0005   0086           00305         MOVWF   TRISB   ; RB0 bis RB7 sind Ausgänge
+                      00306         
+                      00307 ; Die Register TRISA und TRISB legen fest, welche Bits in den jeweiligen Ports
+                      00308 ; Ein- bzw. Ausgänge sind. Eine '1' an der entsprechenden Stelle setzt das Bit
+                      00309 ; des Ports als Eingang eine '0' setzt das Bit als Ausgang.
+                      00310         
+0006   1283           00311         BCF     bank1   ; wechsle zu Registerbank 0 
+                      00312                         ; (normaler Speicherbereich)
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00313                         
+0007   0185           00314         CLRF    PORTA   ; Port A löschen
+0008   0186           00315         CLRF    PORTB   ; Port B löschen
+                      00316         
+                      00317 
+                      00318 ;PS2 - Übertragungsregister
+                      00319 ;
+0009   01A1           00320         CLRF    sIDLE
+                      00321         
+000A   3001           00322         MOVLW   B'00000001'     
+000B   00A2           00323         MOVWF   sSTART          ;START-Befehl     (00000001) = H'01'
+                      00324         
+000C   3042           00325         MOVLW   B'01000010'     
+000D   00A4           00326         MOVWF   sTYPE           ;GET-TYPE-Befehl  (01000010) = H'42'
+                      00327                 
+                      00328 ;PS2 - Vergleichsregister
+                      00329 ;
+000E   305A           00330         MOVLW   B'01011010'     ; = 0x5A = Status des Controller wenn bereit
+000F   00A7           00331         MOVWF   rSTATUS         ;Register wird zum Vergleichen benutzt
+                      00332                                 ;wenn Controller nicht bereit ist soll von
+                      00333                                 ;er zurück zu main springen und die
+                      00334                                 ;Anzeige löschen
+                      00335 
+                      00336 ;MAX - Register zur Initialisierung
+                      00337 ;
+                      00338 ;Ich haette auch alle (hab ich auch in einer früheren Programmversion)
+                      00339 ;Initialisierungs Adressen/Befehle in Konstanten schreiben können. Da ich aber
+                      00340 ;bei der Programmminimierung mir eine Senderoutine überlegt habe, die mit einer
+                      00341 ;dynamischen Tabelle die komplette Übertragung (Initialisierung + Anzeige) ab
+                      00342 ;arbeitet verwende ich jetzt Register.
+                      00343 
+0010   300B           00344         MOVLW   B'00001011'     ; 0x0B Digitsanzahl Adresse
+0011   00B7           00345         MOVWF   m_DIGITS_adr
+0012   3004           00346         MOVLW   B'00000100'     ; 0x01 Anzahl der aktivierten Digits
+0013   00B8           00347         MOVWF   m_DIGITS                ; ->Digit 0 bis 4<-
+                      00348         
+0014   300C           00349         MOVLW   B'00001100'     ; 0x0C SHUTDOWN Adresse
+0015   00B9           00350         MOVWF   m_SHUTDOWN_adr
+0016   3001           00351         MOVLW   B'00000001'     ; 0x01 MAX Shutdownbefehl
+0017   00BA           00352         MOVWF   m_SHUTDOWN      ; ->Normal Operation<-
+                      00353         
+0018   300F           00354         MOVLW   B'00001111'     ; 0x0F Testbefehlsadresse
+0019   00BB           00355         MOVWF   m_TEST_adr
+001A   3000           00356         MOVLW   B'00000000'     ; 0x00 MAX Testmodus
+001B   00BC           00357         MOVWF   m_TEST          ; ->kein Testmodus<-
+                      00358         
+001C   3009           00359         MOVLW   B'00001001'     ; 0x09 Digit Kodierungsmodus Adresse
+001D   00B3           00360         MOVWF   m_D_MODUS_adr
+001E   3000           00361         MOVLW   B'00000000'     ; 0x00 MAX Digit Kodierungsmodus
+001F   00B4           00362         MOVWF   m_D_MODUS       ;->keine Kodierung<-
+                      00363         
+0020   300A           00364         MOVLW   B'00001010'     ; 0x0A MAX Helligkeitssteuerung Adresse
+0021   00B5           00365         MOVWF   m_HELLIGKEIT_adr
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0022   300F           00366         MOVLW   B'00001111'     ; 0x15 MAX Helligkeitssteuerung
+0023   00B6           00367         MOVWF   m_HELLIGKEIT    ; ->Digit 31 / 32 (max ON)<-
+                      00368 
+                      00369 ;MAX - Register zur Digitzuweisung
+                      00370 ;
+                      00371 ;Könnte auch mit einem Zaehler gemacht werden, aber ich möchte auswählen
+                      00372 ;wo welches Register angezeigt werden soll und auserdem ist es jetzt möglich
+                      00373 ;die Initialisierung und die Anzeige in einem Unterprogramm ab zu arbeiten
+                      00374 
+                      00375         
+0024   3001           00376         MOVLW   B'00000001'     ; LINKS - Digit-Adresse
+0025   00BF           00377         MOVWF   m_LEFT_adr      ; -> Digit 0
+                      00378         
+0026   3002           00379         MOVLW   B'00000010'     ; RECHTS - Digit-Adresse
+0027   00C0           00380         MOVWF   m_RIGHT_adr     ; -> Digit 1
+                      00381         
+0028   3003           00382         MOVLW   B'00000011'     ; Joystick rechts, x-Achse - Digit-Adresse
+0029   00C1           00383         MOVWF   m_RJoyX_adr     ; -> Digit 2
+                      00384         
+002A   3004           00385         MOVLW   B'00000100'     ; Joystick rechts, y-Achse - Digit-Adresse
+002B   00C2           00386         MOVWF   m_RJoyY_adr     ; -> Digit 3
+                      00387         
+002C   3005           00388         MOVLW   B'00000101'     ; Joystick links, x-Achse - Digit-Adresse
+002D   00C3           00389         MOVWF   m_LJoyX_adr     ; -> Digit 4
+                      00390 
+002E   3006           00391         MOVLW   B'00000110'     ; Joystick links, y-Achse - Digit-Adresse
+002F   00C4           00392         MOVWF   m_LJoyY_adr     ; -> Digit 5
+                      00393         
+                      00394 
+                      00395 ;MAX - Starteinstellungen
+                      00396 ;       
+0030   1486           00397         BSF     a_MAX_LOAD      ; MAX-Baustein soll am Anfang nicht im ...
+0031   1506           00398         BSF     a_MAX_CLOCK     ; ...Übertragungsmodus sein
+                      00399 ;*****************
+                      00400 ;* Hauptprogramm *
+                      00401 ;*****************
+                      00402 
+0032                  00403 main
+                      00404 
+0032   01C5           00405         CLRF    m_display_r     ;Display Bits löschen 
+0033   01C6           00406         CLRF    m_display_c     ;Display Bits löschen
+0034   01C7           00407         CLRF    m_display_l     ;Display Bits löschen
+                      00408         
+0035   1585           00409         BSF     a_ATT           ; ATT auf HIGH, Controller wird abgewählt
+                      00410                                 ; (ignoriert alle Daten)
+0036   210E           00411         CALL    UP_wait_25us
+0037   1505           00412         BSF     a_CLOCK         ; Clock HIGH
+0038   1485           00413         BSF     a_COMMAND       ; Command HIGH
+                      00414         
+0039   1185           00415         BCF     a_ATT           ; ATT auf LOW das der Controller
+                      00416                                 ; die Daten annimmt
+                      00417                                         
+003A   2109           00418         CALL    UP_wait_50us    ; Warteschlange bis Controller bereit ist
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00419         
+                      00420 ;#########              
+                      00421 ;       BSF     a1;;;;;;;;;     ;-----DEBUGGING
+003B   204D           00422         CALL    UP_PSC_send_tabelle
+003C   09A8           00423         COMF    gLEFT,F         ;Speicherzellen werden invertiert ( 1 zu 0 
+003D   09A9           00424         COMF    gRIGHT,F                ;und 0 zu 1). Weil wenn eine Taste gedrückt
+                      00425                                 ;ist dann liegt ein 0 Signal am PIC an
+                      00426         
+003E   0827           00427         MOVF    rSTATUS,W       ;Controller Status auf Zustand "bereit"         
+Message[305]: Using default destination of 1 (file).
+003F   02A6           00428         SUBWF   gSTATUS         ;prüfen...
+0040   1D03           00429         BTFSS   STATUS,Z                ;Wenn breit, Zerobit = 1
+0041   2848           00430         GOTO    nicht_bereit    ;<- Controller nicht bereit...
+                      00431                                 ;<- Controller bereit...
+0042   3001           00432         MOVLW   D'1'
+0043   00C8           00433         MOVWF   zaehler         ;falls der Controller wieder
+                      00434                                 ;keine Verbindung hat, das die LEDs 
+                      00435                                 ;auf 0 gesetzt werden!
+                      00436         
+                      00437 
+                      00438 ;#########
+                      00439          ;BCF   d2              ;------DEBUGGING
+0044   2085           00440         CALL    UP_Display_r    ;rechte Display LED auswählen
+0045   20B7           00441         CALL    UP_Display_l    ;linke Display LED auswählen 
+                      00442         ;BSF    d2              ;------DEBUGGING
+                      00443 ;#########       
+                      00444 
+                      00445 
+                      00446 ;#########
+0046                  00447 max
+                      00448 ;         BSF   d2              ;------DEBUGGING
+0046   20E9           00449         CALL    UP_MAX_send_tabelle     ;Ausgabe 
+                      00450 ;       BCF     d2              ;------DEBUGGING
+                      00451 ;#########       
+                      00452          
+                      00453 
+Warning[203]: Found opcode in column 1. (GOTO)
+0047   2832           00454 GOTO    main                    ;Springe wieder an den Anfang zurück   
+                      00455 
+0048                  00456 nicht_bereit
+0048   08C8           00457         MOVF    zaehler,F
+0049   1903           00458         BTFSC   STATUS,Z
+004A   2832           00459         GOTO    main
+Message[305]: Using default destination of 1 (file).
+004B   03C8           00460         DECF    zaehler
+004C   2846           00461         GOTO    max
+                      00462 
+                      00463         
+                      00464         
+                      00465 
+                      00466 ;******************
+                      00467 ;* Unterprogramme *
+                      00468 ;******************
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00469 ;###############################################################################
+                      00470 ;###############################################################################
+004D                  00471 UP_PSC_send_tabelle
+                      00472         
+004D   3000           00473         MOVLW   D'0'
+004E   00B1           00474         MOVWF   zaehler_tab
+                      00475         
+004F   3008           00476 PSC_st1 MOVLW   D'8'
+0050   00B0           00477         MOVWF   zaehler_bit
+                      00478         
+0051   1383           00479         BCF      STATUS, IRP    ; Bank 0 oder 1 (alle Register aus der
+                      00480                                         ; Tabelle sind in Bank 0)
+                      00481         
+0052   0831           00482         MOVF    zaehler_tab,W   ;wird mit dem PCL addiert
+                      00483         
+0053   2114           00484         CALL    tab_PSC         ;Öffnet die "dynamische Tabelle"
+                      00485                                 ;Im Workregister steht jetzt die Adresse
+                      00486                                 ;des Registers dessen Inhalt
+                      00487                                 ;Übertragen werden soll
+                      00488                                 
+0054   0084           00489         MOVWF   FSR             ;der Zeiger zeigt jetzt auf das Register
+                      00490                                 ;dessen Inhalt Übertragen werden soll
+                      00491                                 
+0055   0800           00492         MOVF    INDF,W          ;mit dem virtuellen Register INDF kann der
+                      00493                                 ;Inhalt des Registers ausgegeben werden,
+                      00494                                 ;auf das der Zeiger FSR zeigt
+                      00495 
+0056   00A0           00496         MOVWF   sPSC            ;Inhalt wird in sende Register kopiert,
+                      00497                                 ;da ein weiteres Register aus der Tabelle
+                      00498                                 ;benötigt wird um die empfangenen Bits zu
+                      00499                                 ;speichern
+                      00500         
+Message[305]: Using default destination of 1 (file).
+0057   0AB1           00501         INCF    zaehler_tab     ;nächste Tabellenreihe
+                      00502         
+0058   0831           00503         MOVF    zaehler_tab,W   ;wird mit dem PCL addiert
+0059   2114           00504         CALL    tab_PSC         ;Öffnet die "dynamische Tabelle"
+                      00505                                 ;Im Workregister steht jetzt die Adresse
+                      00506                                 ;des Registers in das geschrieben wird
+                      00507                                     
+005A   0084           00508         MOVWF   FSR             ;der Zeiger zeigt jetzt auf das Register
+                      00509                                 ;in das die empfangenen Bits gespeichert
+                      00510                                 ;werden
+                      00511                                 ;-
+                      00512                                 ;mit dem virtuellen Register INDF kann der
+                      00513                                 ;Inhalt des Registers geändert werden,
+                      00514                                 ;auf das der Zeiger FSR zeigt                           
+                      00515                                         
+Message[305]: Using default destination of 1 (file).
+005B   0CA0           00516 PSC_1   RRF     sPSC            ;verschiebe sende Register nach rechts...
+005C   1C03           00517         BTFSS   STATUS,C                ;prüfe Wertigkeit des rausgeworfenen Bits
+005D   2869           00518         GOTO    PSC_sende_0     ;(STATUS,C=0)-> Übertrage 0 an Controller...
+005E   2877           00519         GOTO    PSC_sende_1     ;(STATUS,C=1)-> ansonsten Übertrage '1' 
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00520 
+Message[305]: Using default destination of 1 (file).
+005F   03B0           00521 PSC_2   DECF    zaehler_bit
+0060   08B0           00522         MOVF    zaehler_bit,F   ; Zähler ...
+0061   1D03           00523         BTFSS   STATUS,Z                ; ... auf 0 prüfen,
+0062   285B           00524         GOTO    PSC_1           ; <-- Zähler != 0 --> nächstes Bit übertrag.
+                      00525                                 ; <-- Zähler == 0
+                      00526                                  
+                      00527 
+Message[305]: Using default destination of 1 (file).
+0063   0AB1           00528         INCF    zaehler_tab
+0064   3012           00529         MOVLW   D'18'           ;PS2-Analog-Mode Controller
+0065   0231           00530         SUBWF   zaehler_tab,W
+0066   1D03           00531         BTFSS   STATUS,Z                
+0067   284F           00532         GOTO    PSC_st1         ;zaehler_tab < 18
+0068   0008           00533         RETURN                  ;zaehler_tab = 18
+                      00534 ;###########################################################    
+0069                  00535 PSC_sende_0
+0069   1085           00536         BCF     a_COMMAND       ;auf 0 setzten
+006A   1105           00537         BCF     a_CLOCK         ;negative Flanke (Controller ließt COMMAND)
+006B   210E           00538         CALL    UP_wait_25us    ;aber erst nach 25µs !!!
+006C   1805           00539         BTFSC   e_DATA          ;e_DATA prüfen
+006D   2873           00540         GOTO    INDF_0_write_1  ;empfangenes Bit in Carry-Flag setzen
+006E   2875           00541         GOTO    INDF_0_write_0  ;empfangenes Bit in Carry-Flag setzen
+006F                  00542 PSC_sende_0_next        
+Message[305]: Using default destination of 1 (file).
+006F   0C80           00543         RRF     INDF            ;empfangenes Bit in Register hinzufügen
+0070   1505           00544         BSF     a_CLOCK
+0071   210E           00545         CALL    UP_wait_25us
+0072   285F           00546         GOTO    PSC_2
+                      00547 ;###################################### 
+0073                  00548 INDF_0_write_1
+0073   1403           00549         BSF     STATUS,C
+0074   286F           00550         GOTO    PSC_sende_0_next
+                      00551 
+0075                  00552 INDF_0_write_0                  ;zur Übersicht, hier geschrieben!!!
+0075   1003           00553         BCF     STATUS,C
+0076   286F           00554         GOTO    PSC_sende_0_next        
+                      00555 ;###########################################################
+0077                  00556 PSC_sende_1
+0077   1485           00557         BSF     a_COMMAND       ;auf 1 setzten
+0078   1105           00558         BCF     a_CLOCK         ;negative Flanke (Controller ließt COMMAND)
+0079   210E           00559         CALL    UP_wait_25us    ;aber erst nach 4µs !!!
+007A   1805           00560         BTFSC   e_DATA          ;e_DATA prüfen
+007B   2881           00561         GOTO    INDF_1_write_1  ;empfangenes Bit in Carry-Flag setzen
+007C   2883           00562         GOTO    INDF_1_write_0  ;empfangenes Bit in Carry-Flag setzen
+007D                  00563 PSC_sende_1_next        
+Message[305]: Using default destination of 1 (file).
+007D   0CA5           00564         RRF     gTYPE           ;empfangenes Bit in Register hinzufügen
+007E   1505           00565         BSF     a_CLOCK
+007F   210E           00566         CALL    UP_wait_25us
+0080   285F           00567         GOTO    PSC_2
+                      00568 ;######################################
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0081                  00569 INDF_1_write_1
+0081   1403           00570         BSF     STATUS,C
+0082   287D           00571         GOTO    PSC_sende_1_next
+                      00572 
+0083                  00573 INDF_1_write_0                  ;zur Übersicht, hier geschrieben!!!
+0083   1003           00574         BCF     STATUS,C
+0084   287D           00575         GOTO    PSC_sende_1_next
+                      00576 ;###############################################################################
+0085                  00577 UP_Display_r                    ;Positionsberechnung Joystick rechts 
+0085   3055           00578         MOVLW   D'85'
+0086   022A           00579         SUBWF   gRJoyX,W
+0087   1803           00580         BTFSC   STATUS,C
+0088   2897           00581         GOTO    x_groesser_85
+                      00582 
+0089                  00583 x_kleiner_gleich_85     
+0089   3055           00584         MOVLW   D'85'
+008A   022B           00585         SUBWF   gRJoyY,W
+008B   1803           00586         BTFSC   STATUS,C
+008C   288F           00587         GOTO    y_groesser_85   
+008D                  00588 y_kleiner_gleich_85
+008D   14C5           00589         BSF     m_display_r,1
+008E   0008           00590         RETURN
+                      00591         
+                      00592         
+008F                  00593 y_groesser_85
+008F   30AA           00594         MOVLW   D'170'
+0090   022B           00595         SUBWF   gRJoyY,W
+0091   1803           00596         BTFSC   STATUS,C
+0092   2895           00597         GOTO    y_groesser_170
+0093                  00598 y_kleiner_gleich_170
+0093   1545           00599         BSF     m_display_r,2
+0094   0008           00600         RETURN
+                      00601         
+                      00602         
+0095                  00603 y_groesser_170
+0095   15C5           00604         BSF     m_display_r,3
+0096   0008           00605         RETURN
+                      00606 ;####################################
+                      00607 ;####################################   
+0097                  00608 x_groesser_85
+0097   30AA           00609         MOVLW   D'170'
+0098   022A           00610         SUBWF   gRJoyX,W
+0099   1803           00611         BTFSC   STATUS,C
+009A   28A9           00612         GOTO    x_groesser_170
+009B                  00613 x_kleiner_gleich_170
+009B   3055           00614         MOVLW   D'85'
+009C   022B           00615         SUBWF   gRJoyY,W
+009D   1803           00616         BTFSC   STATUS,C
+009E   28A1           00617         GOTO    y_2_groesser_85 
+009F                  00618 y_2_kleiner_gleich_85
+009F   1445           00619         BSF     m_display_r,0
+00A0   0008           00620         RETURN
+                      00621         
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00622         
+00A1                  00623 y_2_groesser_85
+00A1   30AA           00624         MOVLW   D'170'
+00A2   022B           00625         SUBWF   gRJoyY,W
+00A3   1803           00626         BTFSC   STATUS,C
+00A4   28A7           00627         GOTO    y_2_groesser_170
+00A5                  00628 y_2_kleiner_gleich_170
+00A5   17C6           00629         BSF     m_display_c,7
+00A6   0008           00630         RETURN
+                      00631         
+                      00632         
+00A7                  00633 y_2_groesser_170
+00A7   1645           00634         BSF     m_display_r,4
+00A8   0008           00635         RETURN  
+                      00636         
+                      00637 ;####################################
+                      00638 ;####################################   
+00A9                  00639 x_groesser_170
+00A9   3055           00640         MOVLW   D'85'
+00AA   022B           00641         SUBWF   gRJoyY,W
+00AB   1803           00642         BTFSC   STATUS,C
+00AC   28AF           00643         GOTO    y_3_groesser_85 
+00AD                  00644 y_3_kleiner_gleich_85
+00AD   17C5           00645         BSF     m_display_r,7
+00AE   0008           00646         RETURN
+                      00647         
+                      00648         
+00AF                  00649 y_3_groesser_85
+00AF   30AA           00650         MOVLW   D'170'
+00B0   022B           00651         SUBWF   gRJoyY,W
+00B1   1803           00652         BTFSC   STATUS,C
+00B2   28B5           00653         GOTO    y_3_groesser_170
+00B3                  00654 y_3_kleiner_gleich_170
+00B3   1745           00655         BSF     m_display_r,6
+00B4   0008           00656         RETURN
+                      00657         
+                      00658         
+00B5                  00659 y_3_groesser_170
+00B5   16C5           00660         BSF     m_display_r,5
+00B6   0008           00661         RETURN  
+                      00662 ;###############################################################################
+00B7                  00663 UP_Display_l                    ;Positionsberechnung Joystick links
+00B7   3055           00664         MOVLW   D'85'           ;links und rechts kann auch wieder mit
+00B8   022C           00665         SUBWF   gLJoyX,W                ;Tabelle minimiert weden!
+00B9   1803           00666         BTFSC   STATUS,C
+00BA   28C9           00667         GOTO    _x_groesser_85
+                      00668 
+00BB                  00669 _x_kleiner_gleich_85    
+00BB   3055           00670         MOVLW   D'85'
+00BC   022D           00671         SUBWF   gLJoyY,W
+00BD   1803           00672         BTFSC   STATUS,C
+00BE   28C1           00673         GOTO    _y_groesser_85  
+00BF                  00674 _y_kleiner_gleich_85
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00BF   14C7           00675         BSF     m_display_l,1
+00C0   0008           00676         RETURN
+                      00677         
+                      00678         
+00C1                  00679 _y_groesser_85
+00C1   30AA           00680         MOVLW   D'170'
+00C2   022D           00681         SUBWF   gLJoyY,W
+00C3   1803           00682         BTFSC   STATUS,C
+00C4   28C7           00683         GOTO    _y_groesser_170
+00C5                  00684 _y_kleiner_gleich_170
+00C5   1547           00685         BSF     m_display_l,2
+00C6   0008           00686         RETURN
+                      00687         
+                      00688         
+00C7                  00689 _y_groesser_170
+00C7   15C7           00690         BSF     m_display_l,3
+00C8   0008           00691         RETURN
+                      00692 ;####################################
+                      00693 ;####################################   
+00C9                  00694 _x_groesser_85
+00C9   30AA           00695         MOVLW   D'170'
+00CA   022C           00696         SUBWF   gLJoyX,W
+00CB   1803           00697         BTFSC   STATUS,C
+00CC   28DB           00698         GOTO    _x_groesser_170
+00CD                  00699 _x_kleiner_gleich_170
+00CD   3055           00700         MOVLW   D'85'
+00CE   022D           00701         SUBWF   gLJoyY,W
+00CF   1803           00702         BTFSC   STATUS,C
+00D0   28D3           00703         GOTO    _y_2_groesser_85        
+00D1                  00704 _y_2_kleiner_gleich_85
+00D1   1447           00705         BSF     m_display_l,0
+00D2   0008           00706         RETURN
+                      00707         
+                      00708         
+00D3                  00709 _y_2_groesser_85
+00D3   30AA           00710         MOVLW   D'170'
+00D4   022D           00711         SUBWF   gLJoyY,W
+00D5   1803           00712         BTFSC   STATUS,C
+00D6   28D9           00713         GOTO    _y_2_groesser_170
+00D7                  00714 _y_2_kleiner_gleich_170
+00D7   1746           00715         BSF     m_display_c,6
+00D8   0008           00716         RETURN
+                      00717         
+                      00718         
+00D9                  00719 _y_2_groesser_170
+00D9   1647           00720         BSF     m_display_l,4
+00DA   0008           00721         RETURN  
+                      00722         
+                      00723 ;####################################
+                      00724 ;####################################   
+00DB                  00725 _x_groesser_170
+00DB   3055           00726         MOVLW   D'85'
+00DC   022D           00727         SUBWF   gLJoyY,W
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00DD   1803           00728         BTFSC   STATUS,C
+00DE   28E1           00729         GOTO    _y_3_groesser_85        
+00DF                  00730 _y_3_kleiner_gleich_85
+00DF   17C7           00731         BSF     m_display_l,7
+00E0   0008           00732         RETURN
+                      00733         
+                      00734         
+00E1                  00735 _y_3_groesser_85
+00E1   30AA           00736         MOVLW   D'170'
+00E2   022D           00737         SUBWF   gLJoyY,W
+00E3   1803           00738         BTFSC   STATUS,C
+00E4   28E7           00739         GOTO    _y_3_groesser_170
+00E5                  00740 _y_3_kleiner_gleich_170
+00E5   1747           00741         BSF     m_display_l,6
+00E6   0008           00742         RETURN
+                      00743         
+                      00744         
+00E7                  00745 _y_3_groesser_170
+00E7   16C7           00746         BSF     m_display_l,5
+00E8   0008           00747         RETURN
+                      00748 ;###############################################################################
+00E9                  00749 UP_MAX_send_tabelle
+                      00750         
+00E9   3000           00751         MOVLW   D'0'
+00EA   00B1           00752         MOVWF   zaehler_tab     ;Wenn zaehler_tab ungerade, 2.Byte gesendet
+                      00753                                 ;-> LOAD auf 1
+                      00754         
+00EB   3008           00755 MAX_st1 MOVLW   D'8'
+00EC   00B0           00756         MOVWF   zaehler_bit
+                      00757         
+00ED   1383           00758         BCF      STATUS, IRP    ; Bank 0 oder 1  
+                      00759         
+00EE   0831           00760         MOVF    zaehler_tab,W   ;wird mit dem PCL addiert
+                      00761         
+00EF   2262           00762         CALL    tab_MAX         ;Öffnet die "dynamische Tabelle"
+                      00763                                 ;Im Workregister steht jetzt die Adresse
+                      00764                                 ;des Registers dessen Inhalt
+                      00765                                 ;Übertragen werden soll
+                      00766                                 
+00F0   0084           00767         MOVWF   FSR             ;der Zeiger zeigt jetzt auf das Register
+                      00768                                 ;dessen Inhalt Übertragen werden soll
+                      00769                                 
+00F1   0800           00770         MOVFW   INDF            ;mit dem virtuellen Register INDF kann der
+                      00771                                 ;Inhalt des Registers ausgegeben werden,
+                      00772                                 ;auf das der Zeiger FSR zeigt
+                      00773         ;MOVWF  PORTB           ; #############DEBUGGING#############
+                      00774         ;CALL   UP_wait_05s     ; #############DEBUGGING#############
+00F2   00B2           00775         MOVWF   sMAX
+                      00776         
+00F3   1086           00777         BCF     a_MAX_LOAD      ;Vor der Übertragung von 2 Bytes auf LOW
+                      00778         
+                      00779         
+Message[305]: Using default destination of 1 (file).
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00F4   0DB2           00780 MAX_st2 RLF     sMAX            ;MSB zuerst...
+00F5   1803           00781         BTFSC   STATUS,C
+00F6   2907           00782         GOTO    MAX_send_tabelle_1 ;MAX-Datenleitung auf HIGH (Übertrage 1)
+00F7   1006           00783         BCF     a_MAX_DATA       ;MAX-Datenleitung auf LOW      (Übertrage 0)   
+                      00784         
+00F8   1106           00785 MAX_st3 BCF     a_MAX_CLOCK     ;
+                      00786         ;CALL   UP_wait_05s     ; #############DEBUGGING#############
+00F9   1506           00787         BSF     a_MAX_CLOCK     ;Positive Flanke erzeugen
+00FA   1106           00788         BCF     a_MAX_CLOCK
+                      00789         
+Message[305]: Using default destination of 1 (file).
+00FB   03B0           00790         DECF    zaehler_bit
+00FC   08B0           00791         MOVF    zaehler_bit,F   ; Zähler ...
+00FD   1D03           00792         BTFSS   STATUS,Z                ; ... auf 0 prüfen,
+00FE   28F4           00793         GOTO    MAX_st2         ; <-- Zähler != 0 --> nächstes Bit übertrag.
+                      00794                                 ; <-- Zähler == 0
+                      00795         
+00FF   1831           00796         BTFSC   zaehler_tab,0   ; nach jedem 2. Byte LOAD auf 1 
+0100   1486           00797         BSF     a_MAX_LOAD      ; <-- Zähler_tab == ungerade -> 2.Byte 
+                      00798                                 ; <-- Zähler_tab == gerade -> 1.Byte
+Message[305]: Using default destination of 1 (file).
+0101   0AB1           00799         INCF    zaehler_tab
+0102   3014           00800         MOVLW   D'20'           ;Platine, mit Joystickberechnung 20Bytes
+0103   0231           00801         SUBWF   zaehler_tab,W
+0104   1D03           00802         BTFSS   STATUS,Z                
+0105   28EB           00803         GOTO    MAX_st1         ;zaehler_tab < 22
+0106   0008           00804         RETURN                  ;zaehler_tab = 22
+                      00805         
+0107                  00806 MAX_send_tabelle_1
+0107   1406           00807         BSF     a_MAX_DATA
+0108   28F8           00808         GOTO    MAX_st3
+                      00809                 
+                      00810 ;###############################################################################
+                      00811 ;###########################      Warteschleifen     ###########################
+                      00812 ;###############################################################################
+                      00813 
+                      00814 ;############################***********************############################
+                      00815 ;##########################  ATTENTION Warteschleife  ##########################
+                      00816 ;UP_wait_20us
+                      00817 ;                       ;100 cycles
+                      00818 ;       movlw   0x21
+                      00819 ;       movwf   wait_20us
+                      00820 ;loop20us_0
+                      00821 ;       decfsz  wait_20us, f
+                      00822 ;       goto    loop20us_0
+                      00823 ;RETURN
+                      00824 ;##########################  ATTENTION Warteschleife 2 #########################
+0109                  00825 UP_wait_50us
+                      00826                         ;250 cycles
+0109   3053           00827         movlw   0x53
+010A   00AE           00828         movwf   wait_50us
+010B                  00829 loop50us_0
+010B   0BAE           00830         decfsz  wait_50us, f
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+010C   290B           00831         goto    loop50us_0
+Warning[203]: Found opcode in column 1. (RETURN)
+010D   0008           00832 RETURN
+                      00833 ;########################**********************************#####################
+                      00834 ;###################### CLOCK LOW - CLOCK HIGH Warteschleife ###################
+                      00835 ;UP_wait_5us            ;UP_wait_5us
+                      00836 ;                       ;25 cycles
+                      00837 ;       movlw   0x08
+                      00838 ;       movwf   wait_5us
+                      00839 ;loop5us_0
+                      00840 ;       decfsz  wait_5us, f
+                      00841 ;       goto    loop5us_0
+                      00842 ;RETURN
+                      00843 ;##################### CLOCK LOW - CLOCK HIGH Warteschleife 2 ##################
+010E                  00844 UP_wait_25us            ;UP_wait_5us
+                      00845                         ;124 cycles
+010E   3029           00846         movlw   0x29
+010F   00AF           00847         movwf   wait_25us
+0110                  00848 loop25us_0
+0110   0BAF           00849         decfsz  wait_25us, f
+0111   2910           00850         goto    loop25us_0
+                      00851 
+                      00852                         ;1 cycle
+0112   0000           00853         nop
+Warning[203]: Found opcode in column 1. (RETURN)
+0113   0008           00854 RETURN
+                      00855 ;############################***********************############################
+                      00856 ;########################### DEBUGGING Warteschleife ###########################
+                      00857 ;UP_wait_05s
+                      00858 ;                       ;2499999 cycles
+                      00859 ;       movlw   0x16
+                      00860 ;       movwf   wait_05s
+                      00861 ;       movlw   0x74
+                      00862 ;       movwf   wait_05s_1
+                      00863 ;       movlw   0x06
+                      00864 ;       movwf   wait_05s_2
+                      00865 ;loop05s_0
+                      00866 ;       decfsz  wait_05s, f
+                      00867 ;       goto    $+2
+                      00868 ;       decfsz  wait_05s_1, f
+                      00869 ;       goto    $+2
+                      00870 ;       decfsz  wait_05s_2, f
+                      00871 ;       goto    loop05s_0
+                      00872 ;
+                      00873 ;                       ;1 cycle
+                      00874 ;       nop
+                      00875 ;RETURN
+                      00876 ;###############################################################################
+                      00877 ;###########################        Tabellen        ############################
+                      00878 ;###############################################################################
+                      00879 
+                      00880 ;############################***********************############################
+                      00881 ;###########################       PSC-Tabelle       ###########################
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00882 
+0114                  00883 tab_PSC                         ;Tabellenlänge: 18; -> zaehler_tab max. 18!
+0114   100A           00884         BCF     PCLATH,0                ;PCLATH auf ...
+0115   148A           00885         BSF     PCLATH,1                ;... 0x2 stellen
+0116   3E50           00886         ADDLW   0x50
+0117   0082           00887         MOVWF   PCL             ;PCL ist jetzt 0x250 + zaehler_tab
+                      00888         
+                      00889         
+                      00890         
+Warning[205]: Found directive in column 1. (ORG)
+0250                  00891 ORG     0x250                   ; Tabelle in Speicherblock 2
+                      00892         
+0250   3422           00893         RETLW   sSTART          ; Playstation Controller - Startbefehl
+0251   3423           00894         RETLW   gSTART          ; empfange... irgentwas
+                      00895 
+0252   3424           00896         RETLW   sTYPE           ; Playstation Controller - Typebefehl
+0253   3425           00897         RETLW   gTYPE           ; empfange Type des Controllers
+                      00898 
+0254   3421           00899         RETLW   sIDLE           ; übertrage 0 Signal
+0255   3426           00900         RETLW   gSTATUS         ; empfange Status des Controllers 
+                      00901 
+0256   3421           00902         RETLW   sIDLE           ; übertrage 0 Signal
+0257   3428           00903         RETLW   gLEFT           ; empfange Status der Tasten LINKS
+                      00904 
+0258   3421           00905         RETLW   sIDLE           ; übertrage 0 Signal
+0259   3429           00906         RETLW   gRIGHT          ; empfange Status der Tasten RECHTS
+                      00907 
+025A   3421           00908         RETLW   sIDLE           ; übertrage 0 Signal
+025B   342A           00909         RETLW   gRJoyX          ; empfange : Joystick rechts, x-Achse
+                      00910 
+025C   3421           00911         RETLW   sIDLE           ; übertrage 0 Signal
+025D   342B           00912         RETLW   gRJoyY          ; empfange : Joystick rechts, y-Achse
+                      00913 
+025E   3421           00914         RETLW   sIDLE           ; übertrage 0 Signal
+025F   342C           00915         RETLW   gLJoyX          ; empfange : Joystick links, x-Achse
+                      00916 
+0260   3421           00917         RETLW   sIDLE           ; übertrage 0 Signal
+0261   342D           00918         RETLW   gLJoyY          ; empfange : Joystick links, y-Achse
+                      00919 
+                      00920 ;############################***********************############################
+                      00921 ;###########################       MAX-Tabelle       ###########################
+                      00922 
+0262                  00923 tab_MAX                         ;Tabellenlänge: 22; -> zaehler_tab max. 22!
+0262   140A           00924         BSF     PCLATH,0                ;PCLATH auf ...
+0263   148A           00925         BSF     PCLATH,1                ;... 0x3 stellen
+0264   0082           00926         MOVWF   PCL             ;PCL ist jetzt 0x300 + zaehler_tab
+                      00927         
+                      00928         
+Warning[205]: Found directive in column 1. (ORG)
+0300                  00929 ORG     0x300                   ; Tabelle in Speicherblock 3
+                      00930         
+0300   3437           00931         RETLW   m_DIGITS_adr    ; Anzahl der genutzten Digits
+0301   3438           00932         RETLW   m_DIGITS                ; 
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 19
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00933 
+0302   3439           00934         RETLW   m_SHUTDOWN_adr  ; Normalmodus oder Ausgeschaltet
+0303   343A           00935         RETLW   m_SHUTDOWN      ; 
+                      00936 
+0304   343B           00937         RETLW   m_TEST_adr      ; Normalmodus oder Displaytest
+0305   343C           00938         RETLW   m_TEST          ; 
+                      00939 
+0306   3433           00940         RETLW   m_D_MODUS_adr   ; Dekodierungsmodus 
+0307   3434           00941         RETLW   m_D_MODUS       ; 
+                      00942 
+0308   3435           00943         RETLW   m_HELLIGKEIT_adr        ; Helligkeitssteuerung der LED's
+0309   3436           00944         RETLW   m_HELLIGKEIT    ; 
+                      00945 
+030A   343F           00946         RETLW   m_LEFT_adr      ; Tasten LINKS - Digit-Adresse
+030B   3428           00947         RETLW   gLEFT           ; Tasten LINKS
+                      00948 
+030C   3440           00949         RETLW   m_RIGHT_adr     ; Tasten RECHTS - Digit-Adresse
+030D   3429           00950         RETLW   gRIGHT          ; Tasten RECHTS
+                      00951 
+030E   3441           00952         RETLW   m_RJoyX_adr     ; Joystick rechts, x-Achse - Digit-Adresse
+030F   3445           00953         RETLW   m_display_r     ; Joystick Positionsdisplay, rechts
+                      00954 
+0310   3442           00955         RETLW   m_RJoyY_adr     ; Joystick rechts, y-Achse - Digit-Adresse
+0311   3447           00956         RETLW   m_display_l     ; Joystick Positionsdisplay, links
+                      00957 
+0312   3443           00958         RETLW   m_LJoyX_adr     ; Joystick links, x-Achse - Digit-Adresse
+0313   3446           00959         RETLW   m_display_c     ; Joystick Positionsdisplay, recht&links...
+                      00960                                 ; mittlere LEDs
+                      00961 
+                      00962 
+Warning[205]: Found directive in column 1. (END)
+                      00963 END
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 20
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+C                                 00000000
+DC                                00000001
+EEADR                             00000009
+EECON1                            00000088
+EECON2                            00000089
+EEDATA                            00000008
+EEIE                              00000006
+EEIF                              00000004
+F                                 00000001
+FSR                               00000004
+GIE                               00000007
+INDF                              00000000
+INDF_0_write_0                    00000075
+INDF_0_write_1                    00000073
+INDF_1_write_0                    00000083
+INDF_1_write_1                    00000081
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTF                              00000001
+IRP                               00000007
+MAX_send_tabelle_1                00000107
+MAX_st1                           000000EB
+MAX_st2                           000000F4
+MAX_st3                           000000F8
+NOT_PD                            00000003
+NOT_RBPU                          00000007
+NOT_TO                            00000004
+OPTION_REG                        00000081
+PCL                               00000002
+PCLATH                            0000000A
+PORTA                             00000005
+PORTB                             00000006
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+PSC_1                             0000005B
+PSC_2                             0000005F
+PSC_sende_0                       00000069
+PSC_sende_0_next                  0000006F
+PSC_sende_1                       00000077
+PSC_sende_1_next                  0000007D
+PSC_st1                           0000004F
+RBIE                              00000003
+RBIF                              00000000
+RD                                00000000
+RP0                               00000005
+RP1                               00000006
+STATUS                            00000003
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 21
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+T0SE                              00000004
+TMR0                              00000001
+TRISA                             00000085
+TRISB                             00000086
+UP_Display_l                      000000B7
+UP_Display_r                      00000085
+UP_MAX_send_tabelle               000000E9
+UP_PSC_send_tabelle               0000004D
+UP_wait_25us                      0000010E
+UP_wait_50us                      00000109
+W                                 00000000
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+Z                                 00000002
+_CP_OFF                           00003FFF
+_CP_ON                            0000000F
+_HS_OSC                           00003FFE
+_LP_OSC                           00003FFC
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_XT_OSC                           00003FFD
+__16F84A                          00000001
+_x_groesser_170                   000000DB
+_x_groesser_85                    000000C9
+_x_kleiner_gleich_170             000000CD
+_x_kleiner_gleich_85              000000BB
+_y_2_groesser_170                 000000D9
+_y_2_groesser_85                  000000D3
+_y_2_kleiner_gleich_170           000000D7
+_y_2_kleiner_gleich_85            000000D1
+_y_3_groesser_170                 000000E7
+_y_3_groesser_85                  000000E1
+_y_3_kleiner_gleich_170           000000E5
+_y_3_kleiner_gleich_85            000000DF
+_y_groesser_170                   000000C7
+_y_groesser_85                    000000C1
+_y_kleiner_gleich_170             000000C5
+_y_kleiner_gleich_85              000000BF
+a_ATT                             PORTA, 3
+a_CLOCK                           PORTA, 2
+a_COMMAND                         PORTA, 1
+a_MAX_CLOCK                       PORTB, 2
+a_MAX_DATA                        PORTB, 0
+a_MAX_LOAD                        PORTB, 1
+bank1                             STATUS, RP0
+e_DATA                            PORTA, 0
+gLEFT                             00000028
+gLJoyX                            0000002C
+gLJoyY                            0000002D
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 22
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+gRIGHT                            00000029
+gRJoyX                            0000002A
+gRJoyY                            0000002B
+gSTART                            00000023
+gSTATUS                           00000026
+gTYPE                             00000025
+init                              00000001
+loop25us_0                        00000110
+loop50us_0                        0000010B
+m_DIGITS                          00000038
+m_DIGITS_adr                      00000037
+m_D_MODUS                         00000034
+m_D_MODUS_adr                     00000033
+m_HELLIGKEIT                      00000036
+m_HELLIGKEIT_adr                  00000035
+m_LEFT_adr                        0000003F
+m_LJoyX_adr                       00000043
+m_LJoyY_adr                       00000044
+m_RIGHT_adr                       00000040
+m_RJoyX_adr                       00000041
+m_RJoyY_adr                       00000042
+m_SHUTDOWN                        0000003A
+m_SHUTDOWN_adr                    00000039
+m_STATUS_adr                      0000003E
+m_TEST                            0000003C
+m_TEST_adr                        0000003B
+m_TYPE_adr                        0000003D
+m_display_c                       00000046
+m_display_l                       00000047
+m_display_r                       00000045
+main                              00000032
+max                               00000046
+nicht_bereit                      00000048
+rSTATUS                           00000027
+sIDLE                             00000021
+sMAX                              00000032
+sPSC                              00000020
+sSTART                            00000022
+sTYPE                             00000024
+tab_MAX                           00000262
+tab_PSC                           00000114
+wait_05s                          00000049
+wait_05s_1                        0000004A
+wait_05s_2                        0000004B
+wait_25us                         0000002F
+wait_50us                         0000002E
+x_groesser_170                    000000A9
+x_groesser_85                     00000097
+x_kleiner_gleich_170              0000009B
+x_kleiner_gleich_85               00000089
+y_2_groesser_170                  000000A7
+y_2_groesser_85                   000000A1
+y_2_kleiner_gleich_170            000000A5
+MPASM  5.03                    PROJEKT4_1.ASM   5-14-2007  23:46:12         PAGE 23
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+y_2_kleiner_gleich_85             0000009F
+y_3_groesser_170                  000000B5
+y_3_groesser_85                   000000AF
+y_3_kleiner_gleich_170            000000B3
+y_3_kleiner_gleich_85             000000AD
+y_groesser_170                    00000095
+y_groesser_85                     0000008F
+y_kleiner_gleich_170              00000093
+y_kleiner_gleich_85               0000008D
+zaehler                           00000048
+zaehler_bit                       00000030
+zaehler_tab                       00000031
+
+
+MEMORY USAGE MAP ('X' = Used,  '-' = Unused)
+
+0000 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0040 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0080 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+00C0 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0100 : XXXXXXXXXXXXXXXX XXXXXXXX-------- ---------------- ----------------
+0240 : ---------------- XXXXXXXXXXXXXXXX XXXXX----------- ----------------
+0300 : XXXXXXXXXXXXXXXX XXXX------------ ---------------- ----------------
+2000 : -------X-------- ---------------- ---------------- ----------------
+
+All other memory blocks unused.
+
+Program Memory Words Used:   321
+Program Memory Words Free:   703
+
+
+Errors   :     0
+Warnings :     6 reported,     0 suppressed
+Messages :    13 reported,     0 suppressed
+
+

@@ -1,0 +1,910 @@
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ; *******************************************************
+                      00002 ; * projekt0_5.asm - Playstation Controller an PIC16F84A *
+                      00003 ; *******************************************************
+                      00004 ;
+                      00005 ;       KOMMT NOCH.... 
+                      00006 ;
+                      00007 ;
+                      00008 ; **************************************************************
+                      00009 ; *                     Changelog 0_5                   *
+                      00010 ; **************************************************************
+                      00011 ;
+                      00012 ;       Delay = 6e-005 seconds added
+                      00013 ;
+                      00014 ;
+                      00015 ;
+                      00016 ;
+                      00017 ;***************************************************************************
+                      00018 ;* Bestimmung des Prozessortyps für den Assembler und das Programmiergerät *
+                      00019 ;***************************************************************************
+                      00020 
+                      00021                 LIST p=16F84A
+                      00022 
+                      00023 
+                      00024 ;*******************************************************************
+                      00025 ;* Includedatei für den 16F84A einbinden (vordef. Reg. und Konst.) *
+                      00026 ;*******************************************************************
+                      00027 
+                      00028                 #include <p16f84A.INC>
+                      00001         LIST
+                      00002 ; P16F84A.INC  Standard Header File, Version 2.00    Microchip Technology, Inc.
+                      00134         LIST
+                      00029 
+                      00030 ; Diese Datei enthält Vordefinitionen für wichtige Register und Konstanten.
+                      00031 ; (Z.B. gibt es die Konstante PORTB mit der sich ohne Angabe der
+                      00032 ; absoluten Adresse H'0006' der Port B des Prozessors ansprechen lässt)
+                      00033 
+                      00034 
+                      00035 ;*********************************************************
+                      00036 ;* Konfigurationseinstellungen für IC-Prog vordefinieren *
+                      00037 ;*********************************************************
+                      00038 
+2007   3FF2           00039                 __CONFIG _PWRTE_ON & _CP_OFF & _HS_OSC & _WDT_OFF
+                      00040 
+                      00041 ; Hier werden verschiedene Prozessoreigenschaften festgelegt:
+                      00042 ; _PWRTE_ON schaltet den Power Up Timer ein, d.h. der Prozessor wartet nach
+                      00043 ;           dem Einschalten ca. 70ms mit dem Programmstart, um sicher zu sein,
+                      00044 ;           dass alle angeschlossene Peripherie bereit ist.
+                      00045 ; _CP_OFF schaltet die Code-Protection des Prozesors aus. Damit ist das im Prozessor
+                      00046 ;        befindliche Programm jederzeit auslesbar und überschreibbar.
+                      00047 ; _HS_OSC spezifiziert einen Quarzoszillator (Highspeed) als Zeitbasis für den Prozessor.
+                      00048 ; _WDT_OFF schaltet den Watchdog-Timer des Prozesors aus.
+                      00049 
+                      00050 
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00051 ;***********************************
+                      00052 ;* Register / Variablen  festlegen *
+                      00053 ;***********************************
+                      00054 ; hier werden Adressen von Registern / Variablen festgelegt. Diese werden beginnend
+                      00055 ; mit der Adresse H'20' aufsteigend vergeben.
+                      00056 
+                      00057 
+                      00058         CBLOCK  H'20'
+  00000020            00059                 zaehler_in      ;Zaehler innere Schleife
+  00000021            00060                 zaehler_mid     ;Zaehler mittlere Schleife
+  00000022            00061                 zaehler_out     ;Zaehler aeussere Schleife
+                      00062                 
+  00000023            00063                 cnt_get_btn_stats       ;Get_Btn_Stats Schleife
+                      00064                 
+  00000024            00065                 wait250khz      ;250kHz zaehler
+                      00066                 
+  00000025            00067                 wait05s
+  00000026            00068                 wait05s_1
+  00000027            00069                 wait05s_2
+                      00070                 
+  00000028            00071                 wait60us
+                      00072                 
+                      00073 
+                      00074         ENDC
+                      00075         
+Warning[207]: Found label after column 1. (in_cnt)
+  00000000            00076         in_cnt          EQU D'0'                ;Startwert inner Schleife
+Warning[207]: Found label after column 1. (mid_cnt)
+  00000000            00077         mid_cnt         EQU D'0'                ;Startwert mittlere ""
+Warning[207]: Found label after column 1. (out_cnt)
+  00000001            00078         out_cnt         EQU D'1'                ;Startwert äussere ""
+                      00079         
+Warning[207]: Found label after column 1. (get_btn_stats_cnt)
+  00000007            00080         get_btn_stats_cnt       EQU D'7'                ;Startwert Get_Btn_Stats Schleife
+                      00081 
+                      00082 
+                      00083 ;************************
+                      00084 ;* Konstanten festlegen * 
+                      00085 ;************************
+                      00086 
+                      00087 
+                      00088 
+                      00089 ; ***********************************************************************
+                      00090 ; * Definition von einzelnen Bits in einem Register / in einer Variable *
+                      00091 ; ***********************************************************************
+                      00092 
+                      00093 ;#####################################################################
+                      00094 #DEFINE e_data          PORTA, 0                ; Data          Eingang
+                      00095 #DEFINE a_command       PORTA, 1                ; Command       Ausgang
+                      00096 #DEFINE a_clock         PORTA, 2                ; Takt          Ausgang
+                      00097 #DEFINE a_att           PORTA, 3                ; ATT           Ausgang
+                      00098 ;#####################################################################
+                      00099 #DEFINE a_test          PORTB, 0                ; Tets LED      Ausgang
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00100 ;#####################################################################
+                      00101 #DEFINE a1              PORTB, 0                ; BCD-Decoder   Ausgang
+                      00102 #DEFINE b1              PORTB, 1                ; BCD-Decoder   Ausgang
+                      00103 #DEFINE c1              PORTB, 2                ; BCD-Decoder   Ausgang
+                      00104 #DEFINE d1              PORTB, 3                ; BCD-Decoder   Ausgang
+                      00105 ;#####################################################################
+                      00106 #DEFINE a2              PORTB, 4                ; BCD-Decoder   Ausgang
+                      00107 #DEFINE b2              PORTB, 5                ; BCD-Decoder   Ausgang
+                      00108 #DEFINE c2              PORTB, 6                ; BCD-Decoder   Ausgang
+                      00109 #DEFINE d2              PORTB, 7                ; BCD-Decoder   Ausgang
+                      00110 ;#####################################################################
+                      00111 #DEFINE bank1           STATUS, RP0
+                      00112 ;#####################################################################
+                      00113 
+                      00114 
+                      00115 
+                      00116 ; In diesem Beispiel steht das Wort ir_sensor für Bit 0 von Port A und das Wort motor
+                      00117 ; für das Bit 0 von Port B.
+                      00118 
+                      00119 
+                      00120 ;*****************
+                      00121 ;* Programmstart *
+                      00122 ;*****************
+                      00123 
+0000                  00124         ORG     H'00'           ; Das Programm wird ab Speicherstelle 0 in den Speicher geschrieben
+0000   2801           00125         GOTO    init            ; Springe zur Grundinitialisierung der Ports A und B
+                      00126 
+                      00127 
+                      00128 ;*******************
+                      00129 ;* Initialisierung *
+                      00130 ;*******************
+                      00131 
+0001   1683           00132 init    BSF     bank1           ; wechsle zu Registerbank 1 (spezielle Register)
+                      00133 
+0002   3001           00134         MOVLW   B'00000001'
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0003   0085           00135         MOVWF   TRISA           ; RA0 Eingang (RA1 bis RA7 sind Ausgänge)
+0004   3000           00136         MOVLW   B'00000000'
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0005   0086           00137         MOVWF   TRISB           ; RB0 bis RB7 sind Ausgänge
+                      00138         
+0006   1283           00139         BCF     bank1           ; wechsle zu Registerbank 0 (normaler Speicherbereich)
+                      00140         
+0007   0185           00141         CLRF    PORTA           ; Port A löschen
+0008   0186           00142         CLRF    PORTB           ; Port B löschen
+                      00143         
+                      00144 ; Die Register TRISA und TRISB legen fest, welche Bits in den jeweiligen Ports Ein- bzw.
+                      00145 ; Ausgänge sind. Eine '1' an der entsprechenden Stelle setzt das Bit des Ports als Ein-
+                      00146 ; gang eine '0' setzt das Bit als Ausgang.
+                      00147 
+                      00148 
+                      00149 
+                      00150 ;*****************
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00151 ;* Hauptprogramm *
+                      00152 ;*****************
+                      00153 
+                      00154 ;#######################################################################
+                      00155 ;#DEFINE        e_data          PORTA, 0                ; Data          Eingang #
+                      00156 ;#DEFINE        a_command       PORTA, 1                ; Command       Ausgang #
+                      00157 ;#DEFINE        a_clock         PORTA, 2                ; Takt          Ausgang #
+                      00158 ;#DEFINE        a_att           PORTA, 3                ; ATT           Ausgang #
+                      00159 ;#######################################################################
+                      00160 ;#DEFINE        a_test          PORTB, 0                ; Tets LED      Ausgang #
+                      00161 ;#######################################################################
+                      00162 ;#DEFINE        a1              PORTB, 0                ; BCD-Decoder   Ausgang #
+                      00163 ;#DEFINE        b1              PORTB, 1                ; BCD-Decoder   Ausgang #
+                      00164 ;#DEFINE        c1              PORTB, 2                ; BCD-Decoder   Ausgang #
+                      00165 ;#DEFINE        d1              PORTB, 3                ; BCD-Decoder   Ausgang #
+                      00166 ;#######################################################################
+                      00167 ;#DEFINE        a2              PORTB, 4                ; BCD-Decoder   Ausgang #
+                      00168 ;#DEFINE        b2              PORTB, 5                ; BCD-Decoder   Ausgang #
+                      00169 ;#DEFINE        c2              PORTB, 6                ; BCD-Decoder   Ausgang #
+                      00170 ;#DEFINE        d2              PORTB, 7                ; BCD-Decoder   Ausgang #
+                      00171 ;#######################################################################
+                      00172 
+                      00173 
+0009                  00174 main    
+0009   1585           00175         BSF     a_att           ; ATT auf HIGH, Controller ignoriert
+                      00176                                 ; alle Daten
+000A   20C4           00177         CALL    UP_wait250khz                   
+                      00178                                 
+000B   1505           00179         BSF     a_clock         ; Clock HIGH
+000C   1485           00180         BSF     a_command       ; Command HIGH
+                      00181         
+000D   1185           00182         BCF     a_att           ; ATT auf LOW das der Controller
+                      00183                                 ; die Daten annimmt     
+000E   20C4           00184         CALL    UP_wait250khz
+                      00185         
+                      00186 ;#########              
+000F   1406           00187         BSF     a1;;;;;;;;;                             
+                      00188         ;CALL   UP_wait05s                              
+0010   2033           00189         CALL    UP_Start                ;Empfangen:  H'XX'
+                      00190                                 ;------------------------------------   
+                      00191                                 ;Senden:     H'01' Startbefehl
+0011   1006           00192         BCF     a1;;;;;;;;;
+                      00193 ;#########      
+0012   1486           00194         BSF     b1;;;;;;;;;     
+0013   20D8           00195         CALL    UP_wait60us
+0014   203C           00196         CALL    UP_GetType      ;Empfangen:  H'41'=Digital
+                      00197                                 ;ODER       H'23'=NegCon
+                      00198                                 ;ODER       H'73'=Analogue Red LED
+                      00199                                 ;ODER       H'53'=Analogue Green LED
+                      00200                                 ;------------------------------------   
+                      00201                                 ;Senden:     H'42' Datenanfrage
+0015   1086           00202         BCF     b1;;;;;;;;;
+                      00203 ;#########
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0016   1506           00204         BSF     c1;;;;;;;;;
+0017   20D8           00205         CALL    UP_wait60us
+0018   2045           00206         CALL    UP_Status       ;Empfangen:  H'5A'=Status:READY
+                      00207                                 ;------------------------------------   
+                      00208                                 ;Senden:     H'00' Idle
+0019   1106           00209         BCF     c1;;;;;;;;;
+                      00210 ;#########
+001A   1586           00211         BSF     d1;;;;;;;;;
+001B   20D8           00212         CALL    UP_wait60us
+001C   204E           00213         CALL    UP_linke_btns   ;Empfangen:  H'XX'
+                      00214                                 ;------------------------------------   
+                      00215                                 ;Senden:     H'00' Idle
+001D   1186           00216         BCF     d1;;;;;;;;;
+                      00217 ;#########
+001E   1606           00218         BSF     a2;;;;;;;;;
+001F   20D8           00219         CALL    UP_wait60us
+0020   207F           00220         CALL    UP_rechte_btns  ;Empfangen:  H'XX'
+                      00221                                 ;------------------------------------   
+                      00222                                 ;Senden:     H'00' Idle
+0021   1206           00223         BCF     a2;;;;;;;;;
+                      00224 ;#########
+0022   1686           00225         BSF     b2;;;;;;;;;
+0023   20D8           00226         CALL    UP_wait60us
+0024   20A8           00227         CALL    UP_sende0       ;Joysticks - not used
+0025   1286           00228         BCF     b2;;;;;;;;;
+                      00229 ;#########
+0026   1686           00230         BSF     b2;;;;;;;;;
+0027   20D8           00231         CALL    UP_wait60us
+0028   20A8           00232         CALL    UP_sende0       ;Joysticks - not used
+0029   1286           00233         BCF     b2;;;;;;;;;
+                      00234 ;#########
+002A   1686           00235         BSF     b2;;;;;;;;;
+002B   20D8           00236         CALL    UP_wait60us
+002C   20A8           00237         CALL    UP_sende0       ;Joysticks - not used
+002D   1286           00238         BCF     b2;;;;;;;;;
+                      00239 ;#########
+002E   1686           00240         BSF     b2;;;;;;;;;
+002F   20D8           00241         CALL    UP_wait60us
+0030   20A8           00242         CALL    UP_sende0       ;Joysticks - not used
+0031   1286           00243         BCF     b2;;;;;;;;;     
+                      00244 ;#########
+                      00245 
+                      00246 
+                      00247 
+0032   2809           00248         GOTO    main
+                      00249 
+                      00250 
+                      00251 ;******************
+                      00252 ;* Unterprogramme *
+                      00253 ;******************
+                      00254 
+                      00255 ;PSX_TxRx:
+                      00256 ;  FOR idx = 0 TO 7
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00257 ;    PsxCmd = psxOut.LOWBIT(idx)                 setup command bit
+                      00258 ;    PsxClk = ClockMode                          clock the bit (low)
+                      00259 ;    psxIn.LOWBIT(idx) = PsxDat                  get data bit
+                      00260 ;    PsxClk = ~ClockMode                         r(high)
+                      00261 ;  NEXT
+                      00262 
+                      00263 ;###############################################################################
+0033                  00264 UP_Start        
+                      00265         ;H'01' (Bitfolge 00000001) muss im LSB-Verfahren über 
+                      00266         ;a_command gesendet werden.
+                      00267         
+                      00268 ;0      
+                      00269         ;Bit 1 Senden
+0033   20E4           00270         CALL    UP_Bit1
+                      00271 ;1      
+                      00272         ;Bit 0 Senden
+0034   20DE           00273         CALL    UP_Bit0
+                      00274 ;2
+                      00275         ;Bit 0 Senden
+0035   20DE           00276         CALL    UP_Bit0
+                      00277 ;3      
+                      00278         ;Bit 0 Senden
+0036   20DE           00279         CALL    UP_Bit0
+                      00280 ;4
+                      00281         ;Bit 0 Senden
+0037   20DE           00282         CALL    UP_Bit0
+                      00283 ;5      
+                      00284         ;Bit 0 Senden
+0038   20DE           00285         CALL    UP_Bit0
+                      00286 ;6
+                      00287         ;Bit 0 Senden
+0039   20DE           00288         CALL    UP_Bit0
+                      00289 ;7      
+                      00290         ;Bit 0 Senden
+003A   20DE           00291         CALL    UP_Bit0
+                      00292 
+Warning[203]: Found opcode in column 1. (RETURN)
+003B   0008           00293 RETURN          
+                      00294 ;###############################################################################
+003C                  00295 UP_GetType      
+                      00296         ;H'42' (Bitfolge 01000010) muss im LSB-Verfahren über 
+                      00297         ;a_command gesendet werden.
+                      00298         
+                      00299 ;0      
+                      00300         ;Bit 0 Senden
+003C   20DE           00301         CALL    UP_Bit0
+                      00302 ;1      
+                      00303         ;Bit 1 Senden
+003D   20E4           00304         CALL    UP_Bit1
+                      00305 ;2
+                      00306         ;Bit 0 Senden
+003E   20DE           00307         CALL    UP_Bit0
+                      00308 ;3      
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00309         ;Bit 0 Senden
+003F   20DE           00310         CALL    UP_Bit0
+                      00311 ;4
+                      00312         ;Bit 0 Senden
+0040   20DE           00313         CALL    UP_Bit0
+                      00314 ;5      
+                      00315         ;Bit 0 Senden
+0041   20DE           00316         CALL    UP_Bit0
+                      00317 ;6
+                      00318         ;Bit 1 Senden
+0042   20E4           00319         CALL    UP_Bit1
+                      00320 ;7      
+                      00321         ;Bit 0 Senden
+0043   20DE           00322         CALL    UP_Bit0
+                      00323         
+                      00324         
+Warning[203]: Found opcode in column 1. (RETURN)
+0044   0008           00325 RETURN
+                      00326 ;###############################################################################
+0045                  00327 UP_Status       
+                      00328         ;H'00' (Bitfolge 00000000) muss im LSB-Verfahren über 
+                      00329         ;a_command gesendet werden.
+                      00330         
+                      00331 ;0      
+                      00332         ;Bit 0 Senden
+0045   20DE           00333         CALL    UP_Bit0
+                      00334 ;1      
+                      00335         ;Bit 0 Senden
+0046   20DE           00336         CALL    UP_Bit0
+                      00337 ;2
+                      00338         ;Bit 0 Senden
+0047   20DE           00339         CALL    UP_Bit0
+                      00340 ;3      
+                      00341         ;Bit 0 Senden
+0048   20DE           00342         CALL    UP_Bit0
+                      00343 ;4
+                      00344         ;Bit 0 Senden
+0049   20DE           00345         CALL    UP_Bit0
+                      00346 ;5      
+                      00347         ;Bit 0 Senden
+004A   20DE           00348         CALL    UP_Bit0
+                      00349 ;6
+                      00350         ;Bit 0 Senden
+004B   20DE           00351         CALL    UP_Bit0
+                      00352 ;7      
+                      00353         ;Bit 0 Senden
+004C   20DE           00354         CALL    UP_Bit0
+                      00355 
+Warning[203]: Found opcode in column 1. (RETURN)
+004D   0008           00356 RETURN
+                      00357 ;###############################################################################
+004E                  00358 UP_linke_btns   
+                      00359         ;H'00' (Bitfolge 00000000) muss im LSB-Verfahren über 
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00360         ;a_command gesendet werden.
+                      00361         
+                      00362         ; Pfeiltaste nach links <-
+                      00363         ;#####################
+                      00364         ;Bit 0 Senden
+004E   20C4           00365         CALL    UP_wait250khz
+004F   1085           00366         BCF     a_command       ; "0" senden
+0050   1105           00367         BCF     a_clock         ; Clock LOW
+0051   20C4           00368         CALL    UP_wait250khz   
+0052   1805           00369         BTFSC   e_data          
+0053   1706           00370         BSF     c2      
+0054   1505           00371         BSF     a_clock         ; Clock HIGH
+                      00372         
+                      00373         ; Pfeiltaste nach unten \/
+                      00374         ;#####################
+                      00375         ;Bit 0 Senden
+0055   20C4           00376         CALL    UP_wait250khz
+0056   1085           00377         BCF     a_command       ; "0" senden
+0057   1105           00378         BCF     a_clock         ; Clock LOW
+0058   20C4           00379         CALL    UP_wait250khz
+0059   1805           00380         BTFSC   e_data          
+005A   1606           00381         BSF     a2
+005B   1505           00382         BSF     a_clock         ; Clock HIGH    
+                      00383         
+                      00384         ; Pfeiltaste nach rechts ->
+                      00385         ;#####################
+                      00386         ;Bit 0 Senden
+005C   20C4           00387         CALL    UP_wait250khz
+005D   1085           00388         BCF     a_command       ; "0" senden
+005E   1105           00389         BCF     a_clock         ; Clock LOW
+005F   20C4           00390         CALL    UP_wait250khz
+0060   1805           00391         BTFSC   e_data          
+0061   1686           00392         BSF     b2
+0062   1505           00393         BSF     a_clock         ; Clock HIGH
+                      00394         
+                      00395         ; Pfeiltaste nach oben /\
+                      00396         ;#####################
+                      00397         ;Bit 0 Senden
+0063   20C4           00398         CALL    UP_wait250khz
+0064   1085           00399         BCF     a_command       ; "0" senden
+0065   1105           00400         BCF     a_clock         ; Clock LOW
+0066   20C4           00401         CALL    UP_wait250khz
+0067   1805           00402         BTFSC   e_data          
+0068   1786           00403         BSF     d2
+0069   1505           00404         BSF     a_clock         ; Clock HIGH
+                      00405         
+                      00406         ; Start
+                      00407         ;#####################
+                      00408         ;Bit 0 Senden
+006A   20C4           00409         CALL    UP_wait250khz
+006B   1085           00410         BCF     a_command       ; "0" senden
+006C   1105           00411         BCF     a_clock         ; Clock LOW
+006D   20C4           00412         CALL    UP_wait250khz
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00413         ;BTFSC  e_data          
+006E   1505           00414         BSF     a_clock         ; Clock HIGH
+                      00415         
+                      00416         ; Joy-R
+                      00417         ;#####################
+                      00418         ;Bit 0 Senden
+006F   20C4           00419         CALL    UP_wait250khz
+0070   1085           00420         BCF     a_command       ; "0" senden
+0071   1105           00421         BCF     a_clock         ; Clock LOW
+0072   20C4           00422         CALL    UP_wait250khz
+                      00423         ;BTFSC  e_data          
+0073   1505           00424         BSF     a_clock         ; Clock HIGH
+                      00425         
+                      00426         ; Joy-L
+                      00427         ;#####################
+                      00428         ;Bit 0 Senden
+0074   20C4           00429         CALL    UP_wait250khz
+0075   1085           00430         BCF     a_command       ; "0" senden
+0076   1105           00431         BCF     a_clock         ; Clock LOW
+0077   20C4           00432         CALL    UP_wait250khz
+                      00433         ;BTFSC  e_data          
+0078   1505           00434         BSF     a_clock         ; Clock HIGH
+                      00435         
+                      00436         ; Select
+                      00437         ;#####################
+                      00438         ;Bit 0 Senden
+0079   20C4           00439         CALL    UP_wait250khz
+007A   1085           00440         BCF     a_command       ; "0" senden
+007B   1105           00441         BCF     a_clock         ; Clock LOW
+007C   20C4           00442         CALL    UP_wait250khz
+                      00443         ;BTFSC  e_data          
+007D   1505           00444         BSF     a_clock         ; Clock HIGH
+                      00445 
+Warning[203]: Found opcode in column 1. (RETURN)
+007E   0008           00446 RETURN
+                      00447 ;###############################################################################
+007F                  00448 UP_rechte_btns  
+                      00449         ;H'00' (Bitfolge 00000000) muss im LSB-Verfahren über 
+                      00450         ;a_command gesendet werden.
+                      00451         
+                      00452         ; [] - Quadrat Taste
+                      00453         ;#####################
+                      00454         ;Bit 0 Senden
+007F   20C4           00455         CALL    UP_wait250khz
+0080   1085           00456         BCF     a_command       ; "0" senden
+0081   1105           00457         BCF     a_clock         ; Clock LOW
+0082   20C4           00458         CALL    UP_wait250khz   
+                      00459         ;BTFSC  e_data                  
+0083   1505           00460         BSF     a_clock         ; Clock HIGH
+                      00461         
+                      00462         ; X - X Taste
+                      00463         ;#####################
+                      00464         ;Bit 0 Senden
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0084   20C4           00465         CALL    UP_wait250khz
+0085   1085           00466         BCF     a_command       ; "0" senden
+0086   1105           00467         BCF     a_clock         ; Clock LOW
+0087   20C4           00468         CALL    UP_wait250khz
+                      00469         ;BTFSC  e_data          
+0088   1505           00470         BSF     a_clock         ; Clock HIGH    
+                      00471         
+                      00472         ; O - Kreis Taste
+                      00473         ;#####################
+                      00474         ;Bit 0 Senden
+0089   20C4           00475         CALL    UP_wait250khz
+008A   1085           00476         BCF     a_command       ; "0" senden
+008B   1105           00477         BCF     a_clock         ; Clock LOW
+008C   20C4           00478         CALL    UP_wait250khz
+                      00479         ;BTFSC  e_data          
+008D   1505           00480         BSF     a_clock         ; Clock HIGH
+                      00481         
+                      00482         ; /.\ - Dreick Taste
+                      00483         ;#####################
+                      00484         ;Bit 0 Senden
+008E   20C4           00485         CALL    UP_wait250khz
+008F   1085           00486         BCF     a_command       ; "0" senden
+0090   1105           00487         BCF     a_clock         ; Clock LOW
+0091   20C4           00488         CALL    UP_wait250khz
+                      00489         ;BTFSC  e_data          
+0092   1505           00490         BSF     a_clock         ; Clock HIGH
+                      00491         
+                      00492         ; R1 - Schultertaste
+                      00493         ;#####################
+                      00494         ;Bit 0 Senden
+0093   20C4           00495         CALL    UP_wait250khz
+0094   1085           00496         BCF     a_command       ; "0" senden
+0095   1105           00497         BCF     a_clock         ; Clock LOW
+0096   20C4           00498         CALL    UP_wait250khz
+                      00499         ;BTFSC  e_data          
+0097   1505           00500         BSF     a_clock         ; Clock HIGH
+                      00501         
+                      00502         ; L1 - Schultertaste
+                      00503         ;#####################
+                      00504         ;Bit 0 Senden
+0098   20C4           00505         CALL    UP_wait250khz
+0099   1085           00506         BCF     a_command       ; "0" senden
+009A   1105           00507         BCF     a_clock         ; Clock LOW
+009B   20C4           00508         CALL    UP_wait250khz
+                      00509         ;BTFSC  e_data          
+009C   1505           00510         BSF     a_clock         ; Clock HIGH
+                      00511         
+                      00512         ; R2 - Schultertaste
+                      00513         ;#####################
+                      00514         ;Bit 0 Senden
+009D   20C4           00515         CALL    UP_wait250khz
+009E   1085           00516         BCF     a_command       ; "0" senden
+009F   1105           00517         BCF     a_clock         ; Clock LOW
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00A0   20C4           00518         CALL    UP_wait250khz
+                      00519         ;BTFSC  e_data          
+00A1   1505           00520         BSF     a_clock         ; Clock HIGH
+                      00521         
+                      00522         ; L2 - Schultertaste
+                      00523         ;#####################
+                      00524         ;Bit 0 Senden
+00A2   20C4           00525         CALL    UP_wait250khz
+00A3   1085           00526         BCF     a_command       ; "0" senden
+00A4   1105           00527         BCF     a_clock         ; Clock LOW
+00A5   20C4           00528         CALL    UP_wait250khz
+                      00529         ;BTFSC  e_data          
+00A6   1505           00530         BSF     a_clock         ; Clock HIGH
+                      00531 
+Warning[203]: Found opcode in column 1. (RETURN)
+00A7   0008           00532 RETURN
+                      00533 ;###############################################################################
+00A8                  00534 UP_sende0
+                      00535         ;H'00' (Bitfolge 00000000) muss im LSB-Verfahren über 
+                      00536         ;a_command gesendet werden.
+                      00537 ;0      
+                      00538         ;Bit 0 Senden
+00A8   20DE           00539         CALL    UP_Bit0
+                      00540 ;1      
+                      00541         ;Bit 0 Senden
+00A9   20DE           00542         CALL    UP_Bit0
+                      00543 ;2
+                      00544         ;Bit 0 Senden
+00AA   20DE           00545         CALL    UP_Bit0
+                      00546 ;3      
+                      00547         ;Bit 0 Senden
+00AB   20DE           00548         CALL    UP_Bit0
+                      00549 ;4
+                      00550         ;Bit 0 Senden
+00AC   20DE           00551         CALL    UP_Bit0
+                      00552 ;5      
+                      00553         ;Bit 0 Senden
+00AD   20DE           00554         CALL    UP_Bit0
+                      00555 ;6
+                      00556         ;Bit 0 Senden
+00AE   20DE           00557         CALL    UP_Bit0
+                      00558 ;7      
+                      00559         ;Bit 0 Senden
+00AF   20DE           00560         CALL    UP_Bit0
+                      00561 
+Warning[203]: Found opcode in column 1. (RETURN)
+00B0   0008           00562 RETURN
+                      00563 ;###############################################################################
+00B1                  00564 UP_sende0_schleife      
+00B1   3007           00565         MOVLW   get_btn_stats_cnt               ;Startwert innere Schleife
+00B2   00A3           00566         MOVWF   cnt_get_btn_stats
+                      00567         
+00B3                  00568 loop_btn_stats  
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00B3   20DE           00569                 CALL    UP_Bit0
+                      00570                 
+00B4   0BA3           00571                 DECFSZ  cnt_get_btn_stats, F    ; innnere Schleife
+00B5   28B3           00572                 GOTO    loop_btn_stats
+                      00573                 
+Warning[203]: Found opcode in column 1. (RETURN)
+00B6   0008           00574 RETURN
+                      00575 ;###############################################################################        
+00B7                  00576 UP_wait 
+00B7   3001           00577         MOVLW   out_cnt ;Startwert äussere Schleife
+00B8   00A2           00578         MOVWF   zaehler_out
+                      00579 
+00B9                  00580 loop_out
+00B9   3000           00581         MOVLW   mid_cnt ;Startwert mittlere Schleife
+00BA   00A1           00582         MOVWF   zaehler_mid
+                      00583 
+00BB                  00584 loop_mid        
+00BB   3000           00585         MOVLW   in_cnt  ;Startwert innere Schleife
+00BC   00A0           00586         MOVWF   zaehler_in
+                      00587         
+00BD                  00588 loop_in 
+00BD   0BA0           00589         DECFSZ  zaehler_in, F; innnere Schleife
+00BE   28BD           00590         GOTO    loop_in
+                      00591         
+00BF   0BA1           00592         DECFSZ  zaehler_mid, F; mittlere Schleife
+00C0   28BB           00593         GOTO    loop_mid
+                      00594         
+00C1   0BA2           00595         DECFSZ  zaehler_out, F; äussere Schleife
+00C2   28B9           00596         GOTO    loop_out
+                      00597         
+Warning[203]: Found opcode in column 1. (RETURN)
+00C3   0008           00598 RETURN
+                      00599 ;###############################################################################
+00C4                  00600 UP_wait250khz
+                      00601                         ;19 cycles
+00C4   3006           00602         movlw   0x06
+00C5   00A4           00603         movwf   wait250khz
+00C6                  00604 Delay_0
+00C6   0BA4           00605         decfsz  wait250khz, f
+00C7   28C6           00606         goto    Delay_0
+                      00607 
+                      00608                         ;1 cycle
+00C8   0000           00609         nop
+                      00610         
+Warning[203]: Found opcode in column 1. (RETURN)
+00C9   0008           00611 RETURN
+                      00612 ;###############################################################################
+00CA                  00613 UP_wait05s
+                      00614                         ;2499999 cycles
+00CA   3016           00615         movlw   0x16
+00CB   00A5           00616         movwf   wait05s
+00CC   3074           00617         movlw   0x74
+00CD   00A6           00618         movwf   wait05s_1
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00CE   3006           00619         movlw   0x06
+00CF   00A7           00620         movwf   wait05s_2
+00D0                  00621 Delay_05
+00D0   0BA5           00622         decfsz  wait05s, f
+00D1   28D3           00623         goto    $+2
+00D2   0BA6           00624         decfsz  wait05s_1, f
+00D3   28D5           00625         goto    $+2
+00D4   0BA7           00626         decfsz  wait05s_2, f
+00D5   28D0           00627         goto    Delay_05
+                      00628 
+                      00629                         ;1 cycle
+00D6   0000           00630         nop
+Warning[203]: Found opcode in column 1. (RETURN)
+00D7   0008           00631 RETURN
+                      00632 ;###############################################################################
+00D8                  00633 UP_wait60us
+                      00634                         ;298 cycles
+00D8   3063           00635         movlw   0x63
+00D9   00A8           00636         movwf   wait60us
+00DA                  00637 Delay_02
+00DA   0BA8           00638         decfsz  wait60us, f
+00DB   28DA           00639         goto    Delay_02
+                      00640 
+                      00641                         ;2 cycles
+00DC   28DD           00642         goto    $+1
+Warning[203]: Found opcode in column 1. (RETURN)
+00DD   0008           00643 RETURN
+                      00644 ;###############################################################################
+00DE                  00645 UP_Bit0 
+                      00646         ;Bit 0 Senden
+00DE   20C4           00647         CALL    UP_wait250khz
+00DF   1085           00648         BCF     a_command       ; "0" senden
+00E0   1105           00649         BCF     a_clock         ; Clock LOW
+00E1   20C4           00650         CALL    UP_wait250khz
+00E2   1505           00651         BSF     a_clock         ; Clock HIGH
+Warning[203]: Found opcode in column 1. (RETURN)
+00E3   0008           00652 RETURN
+                      00653 ;###############################################################################
+00E4                  00654 UP_Bit1 
+                      00655         ;Bit 1 Senden
+00E4   20C4           00656         CALL    UP_wait250khz
+00E5   1485           00657         BSF     a_command       ; "1" senden
+00E6   1105           00658         BCF     a_clock         ; Clock LOW
+00E7   20C4           00659         CALL    UP_wait250khz
+00E8   1505           00660         BSF     a_clock         ; Clock HIGH
+Warning[203]: Found opcode in column 1. (RETURN)
+00E9   0008           00661 RETURN
+                      00662 ;###############################################################################
+Warning[205]: Found directive in column 1. (END)
+                      00663 END
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 14
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+C                                 00000000
+DC                                00000001
+Delay_0                           000000C6
+Delay_02                          000000DA
+Delay_05                          000000D0
+EEADR                             00000009
+EECON1                            00000088
+EECON2                            00000089
+EEDATA                            00000008
+EEIE                              00000006
+EEIF                              00000004
+F                                 00000001
+FSR                               00000004
+GIE                               00000007
+INDF                              00000000
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTF                              00000001
+IRP                               00000007
+NOT_PD                            00000003
+NOT_RBPU                          00000007
+NOT_TO                            00000004
+OPTION_REG                        00000081
+PCL                               00000002
+PCLATH                            0000000A
+PORTA                             00000005
+PORTB                             00000006
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+RBIE                              00000003
+RBIF                              00000000
+RD                                00000000
+RP0                               00000005
+RP1                               00000006
+STATUS                            00000003
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0SE                              00000004
+TMR0                              00000001
+TRISA                             00000085
+TRISB                             00000086
+UP_Bit0                           000000DE
+UP_Bit1                           000000E4
+UP_GetType                        0000003C
+UP_Start                          00000033
+UP_Status                         00000045
+UP_linke_btns                     0000004E
+UP_rechte_btns                    0000007F
+UP_sende0                         000000A8
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 15
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+UP_sende0_schleife                000000B1
+UP_wait                           000000B7
+UP_wait05s                        000000CA
+UP_wait250khz                     000000C4
+UP_wait60us                       000000D8
+W                                 00000000
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+Z                                 00000002
+_CP_OFF                           00003FFF
+_CP_ON                            0000000F
+_HS_OSC                           00003FFE
+_LP_OSC                           00003FFC
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_XT_OSC                           00003FFD
+__16F84A                          00000001
+a1                                PORTB, 0
+a2                                PORTB, 4
+a_att                             PORTA, 3
+a_clock                           PORTA, 2
+a_command                         PORTA, 1
+a_test                            PORTB, 0
+b1                                PORTB, 1
+b2                                PORTB, 5
+bank1                             STATUS, RP0
+c1                                PORTB, 2
+c2                                PORTB, 6
+cnt_get_btn_stats                 00000023
+d1                                PORTB, 3
+d2                                PORTB, 7
+e_data                            PORTA, 0
+get_btn_stats_cnt                 00000007
+in_cnt                            00000000
+init                              00000001
+loop_btn_stats                    000000B3
+loop_in                           000000BD
+loop_mid                          000000BB
+loop_out                          000000B9
+main                              00000009
+mid_cnt                           00000000
+out_cnt                           00000001
+wait05s                           00000025
+wait05s_1                         00000026
+wait05s_2                         00000027
+wait250khz                        00000024
+wait60us                          00000028
+zaehler_in                        00000020
+zaehler_mid                       00000021
+MPASM  5.03                    PROJEKT0_6.ASM   3-9-2007  22:06:55         PAGE 16
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+zaehler_out                       00000022
+
+
+MEMORY USAGE MAP ('X' = Used,  '-' = Unused)
+
+0000 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0040 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+0080 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX
+00C0 : XXXXXXXXXXXXXXXX XXXXXXXXXXXXXXXX XXXXXXXXXX------ ----------------
+2000 : -------X-------- ---------------- ---------------- ----------------
+
+All other memory blocks unused.
+
+Program Memory Words Used:   234
+Program Memory Words Free:   790
+
+
+Errors   :     0
+Warnings :    18 reported,     0 suppressed
+Messages :     2 reported,     0 suppressed
+
+
